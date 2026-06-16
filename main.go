@@ -9,11 +9,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"neurolink/apex-server-monitor/collector"
-	"neurolink/apex-server-monitor/tui"
+	"github.com/Nesoriel/neurolink/collector"
+	"github.com/Nesoriel/neurolink/tui"
 )
 
 func main() {
+	if isConfigCommand(os.Args[1:]) {
+		if err := runConfigCommand(os.Args[1:], os.Getenv, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "neurolink: %v\n", err)
+			os.Exit(2)
+		}
+		return
+	}
+
 	appCfg, err := parseAppConfig(os.Args[1:], os.Getenv)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "neurolink: %v\n", err)

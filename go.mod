@@ -1,4 +1,4 @@
-module neurolink/apex-server-monitor
+module github.com/Nesoriel/neurolink
 
 go 1.26
 

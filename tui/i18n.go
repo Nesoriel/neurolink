@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"neurolink/apex-server-monitor/statusapi"
+	"github.com/Nesoriel/neurolink/statusapi"
 )
 
 type Language string
@@ -94,7 +94,7 @@ func lexiconFor(language Language) lexicon {
 			noRegionalDetail: "没有区域明细",
 			updatedPrefix:    "更新于 ",
 
-			footerSetup: "q 退出  ctrl+c 退出  --api-key 或 NEUROLINK_APEX_API_KEY 启用实时状态  --demo 使用示例数据",
+			footerSetup: "q 退出  ctrl+c 退出  config set api-key 或 --api-key 启用实时状态  --demo 使用示例数据",
 			footerLive:  "q 退出  ctrl+c 退出  --poll-interval 控制刷新频率",
 
 			running:  "正常",
@@ -134,7 +134,7 @@ func lexiconFor(language Language) lexicon {
 		noRegionalDetail: "No regional detail",
 		updatedPrefix:    "Updated ",
 
-		footerSetup: "q quit  ctrl+c quit  --api-key or NEUROLINK_APEX_API_KEY for live status  --demo for sample data",
+		footerSetup: "q quit  ctrl+c quit  config set api-key or --api-key for live status  --demo for sample data",
 		footerLive:  "q quit  ctrl+c quit  --poll-interval controls refresh cadence",
 
 		running:  "RUNNING",

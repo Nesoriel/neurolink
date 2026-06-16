@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"neurolink/apex-server-monitor/statusapi"
+	"github.com/Nesoriel/neurolink/statusapi"
 )
 
 type fakeProvider struct {

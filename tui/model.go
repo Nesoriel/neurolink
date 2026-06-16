@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"neurolink/apex-server-monitor/collector"
-	"neurolink/apex-server-monitor/statusapi"
+	"github.com/Nesoriel/neurolink/collector"
+	"github.com/Nesoriel/neurolink/statusapi"
 )
 
 type Model struct {

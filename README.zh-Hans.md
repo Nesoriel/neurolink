@@ -33,65 +33,124 @@ GET https://api.apexlegendsstatus.com/servers
 
 界面会把响应归一化为核心服务卡片。顶部 Overall 只代表“可玩核心服务”的汇总状态；`Apex Legends Status API` 是第三方状态站/API 自身健康度，会单独显示，不会把状态站问题直接当成 Apex 核心服务宕机。
 
-## API Key 配置
+## 安装
 
-Apex Legends Status API 通常需要 API key。`neurolink` 不会硬编码 key，也不会提交示例真实 token。
-
-可以用命令行参数：
+在当前代码目录中安装：
 
 ```bash
-go run . --api-key "$YOUR_APEX_STATUS_API_KEY"
+go install .
 ```
 
-也可以用环境变量：
+也可以按模块路径安装：
 
 ```bash
-NEUROLINK_APEX_API_KEY="$YOUR_APEX_STATUS_API_KEY" go run .
+go install github.com/Nesoriel/neurolink@latest
 ```
 
-常用参数：
-
-```bash
-go run . --api-key "$YOUR_APEX_STATUS_API_KEY" --poll-interval 30s
-go run . --demo
-```
-
-## 语言配置
-
-TUI 支持英文和简体中文：
-
-```bash
-go run . --lang en
-go run . --lang zh-Hans
-```
-
-也可以用环境变量：
-
-```bash
-NEUROLINK_LANG=zh-Hans go run .
-```
-
-支持值只有 `en` 和 `zh-Hans`。默认是 `en`。
-
-## 无 API Key 时的行为
-
-如果没有 `--api-key`，并且没有设置 `NEUROLINK_APEX_API_KEY`，程序会进入 demo 模式。
-
-Demo 模式使用确定性的示例数据，只用于展示界面和本地开发。界面会显示 `DEMO` 来源和演示提示，不会把示例数据伪装成实时 Apex 服务状态。
-
-## 运行、构建、测试
+## 运行
 
 运行 demo：
 
 ```bash
-go run .
+neurolink
 ```
 
-使用真实 API：
+使用真实 API 做一次性覆盖：
 
 ```bash
-NEUROLINK_APEX_API_KEY="$YOUR_APEX_STATUS_API_KEY" go run . --poll-interval 1m
+neurolink --api-key "$YOUR_APEX_STATUS_API_KEY" --poll-interval 1m
 ```
+
+本地开发时也可以继续用 `go run .`：
+
+```bash
+go run . --demo
+go run . --lang zh-Hans
+```
+
+## 持久化配置
+
+`neurolink` 会把可选的持久化配置保存到 Go `os.UserConfigDir()` 返回的跨平台用户配置目录：
+
+```text
+<user-config-dir>/neurolink/config.json
+```
+
+常见位置：Linux 上是 `~/.config/neurolink/config.json`，macOS 上是 `~/Library/Application Support/neurolink/config.json`，Windows 上是 `%AppData%\neurolink\config.json`。
+
+查看当前配置文件路径：
+
+```bash
+neurolink config path
+```
+
+保存配置：
+
+```bash
+neurolink config set api-key "$YOUR_APEX_STATUS_API_KEY"
+neurolink config set language en
+neurolink config set language zh-Hans
+neurolink config set poll-interval 30s
+```
+
+也可以一次保存多个配置项：
+
+```bash
+neurolink config set --api-key "$YOUR_APEX_STATUS_API_KEY" --lang zh-Hans --poll-interval 30s
+```
+
+查看已保存配置。API key 永远会被遮罩：
+
+```bash
+neurolink config show
+```
+
+删除已保存配置：
+
+```bash
+neurolink config unset api-key
+neurolink config unset language poll-interval
+neurolink config unset all
+```
+
+需要时可以指定自定义配置文件路径：
+
+```bash
+neurolink --config ./local.config.json config show
+neurolink --config ./local.config.json
+```
+
+普通运行时配置优先级是：
+
+```text
+默认值 < 配置文件 < 环境变量 < 命令行参数
+```
+
+## 环境变量
+
+- `NEUROLINK_APEX_API_KEY`：一次性 API key 覆盖
+- `NEUROLINK_LANG`：一次性语言覆盖，支持 `en` 或 `zh-Hans`
+- `NEUROLINK_POLL_INTERVAL`：一次性轮询间隔覆盖，例如 `30s` 或 `1m`
+- `NEUROLINK_CONFIG`：配置文件路径覆盖
+
+命令行参数仍然拥有最高优先级：
+
+```bash
+NEUROLINK_APEX_API_KEY="$YOUR_APEX_STATUS_API_KEY" neurolink --poll-interval 1m
+NEUROLINK_LANG=zh-Hans neurolink --lang en
+```
+
+## 无 API Key 时的行为
+
+如果配置文件、环境变量和 `--api-key` 都没有提供 API key，程序会进入 demo 模式。也可以显式强制使用 demo：
+
+```bash
+neurolink --demo
+```
+
+Demo 模式使用确定性的示例数据，只用于展示界面和本地开发。界面会显示 `DEMO` 来源和演示提示，不会把示例数据伪装成实时 Apex 服务状态。
+
+## 构建和测试
 
 构建：
 
@@ -134,4 +193,4 @@ sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
 - 没有 API key 时只能看到 demo 数据。
 - 最近用户反馈只有在 `/servers` payload 提供相关字段时才会展示。
 - ping 诊断还没有作为独立 TUI 面板暴露。
-- 后续可以增加配置文件、更多服务卡片、状态变化历史和更细粒度的桌面通知。
+- 后续可以增加更多服务卡片、状态变化历史和更细粒度的桌面通知。

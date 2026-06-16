@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"neurolink/apex-server-monitor/statusapi"
+	"github.com/Nesoriel/neurolink/statusapi"
 )
 
 // Start wires the application's background pipeline. The primary feed is the

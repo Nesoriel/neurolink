@@ -3,7 +3,7 @@ package collector
 import (
 	"time"
 
-	"neurolink/apex-server-monitor/statusapi"
+	"github.com/Nesoriel/neurolink/statusapi"
 )
 
 type Mode string

@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"neurolink/apex-server-monitor/collector"
-	"neurolink/apex-server-monitor/statusapi"
+	"github.com/Nesoriel/neurolink/collector"
+	"github.com/Nesoriel/neurolink/statusapi"
 )
 
 func TestViewRendersPolishedDemoDashboard(t *testing.T) {
