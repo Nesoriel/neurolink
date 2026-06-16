@@ -1,133 +1,134 @@
 # neurolink
 
-`neurolink` 是一个 Go 终端 UI 工具，用来在开玩或排查问题前观察 Apex Legends
-相关服务是否健康。界面主题是 Crypto 风格的“监控无人机”，重点展示服务状态，而不是伪装成真实 Apex
-服务器的 ICMP ping。
+English | [简体中文](README.zh-Hans.md)
 
-## 当前数据来源
+`neurolink` is a Go Terminal UI for monitoring Apex Legends service health before or during play. It presents a Crypto-style surveillance dashboard focused on Apex service availability, not fake ICMP pings or player-status tracking.
 
-主数据源是 Apex Legends Status 生态的服务状态接口：
-
-- 网站参考：`https://apexlegendsstatus.com/`
-- API 文档与入口：`https://apexlegendsapi.com/`
-- API 基础地址：`https://api.apexlegendsstatus.com/`
-
-当前实现会轮询 `GET /servers`，也就是官方文档中的服务器状态接口：
-
-```text
-https://api.apexlegendsstatus.com/servers
-```
-
-注意：该端点实际返回的是 `Content-Type: text/plain;charset=UTF-8`，但 body 内容是 JSON。因此客户端会使用 `Accept: */*` 并按 JSON 解码，避免上游返回 `406 Not Acceptable`。
-
-程序只关注服务器/服务可用性，不查询玩家资料、战绩、UID 或用户状态。
-
-响应会被归一化为这些服务卡片：
+The app monitors service availability such as:
 
 - Crossplay Auth
 - Lobby / Matchmaking
 - PC / Desktop Logins
 - Player Accounts
-- Apex Legends Status API
+- Apex Legends Status API health
+- Recent community reports when the status payload includes them
 
-顶部总览的 `Overall` 只代表前四项“游戏核心可玩服务”的状态。`Apex Legends Status API` 是第三方状态站/API 自身健康度，会单独显示，但不会把大厅、匹配、登录等核心服务误判为不可用。
+`neurolink` does not query player profiles, player stats, UID lookup, match history, or player online status.
 
-如果 API 响应中包含最近用户报告，界面会展示简短摘要；如果没有该字段，界面会明确说明当前 payload
-没有报告 feed。
+## Data Source
 
-## API Key 配置
+The primary data source is the Apex Legends Status public site/API ecosystem:
 
-Apex Legends Status API 通常需要 API key。`neurolink` 不会硬编码 key，也不会提交示例真实 token。
+- Website: `https://apexlegendsstatus.com/`
+- API docs/base: `https://apexlegendsapi.com/`
+- API base: `https://api.apexlegendsstatus.com/`
 
-可以用命令行参数：
+The current implementation polls:
+
+```text
+GET https://api.apexlegendsstatus.com/servers
+```
+
+The `/servers` endpoint may return JSON with `Content-Type: text/plain;charset=UTF-8`, so the client sends `Accept: */*` and decodes the response body as JSON.
+
+The normalized dashboard includes the core service cards above. Overall status is derived from playable game services; the Apex Legends Status API health card is shown separately so a status-site issue does not automatically mark Apex gameplay services as down.
+
+## API Key
+
+Apex Legends Status API requests normally require an API key. `neurolink` never hard-codes keys and does not include sample real tokens.
+
+Use a flag:
 
 ```bash
 go run . --api-key "$YOUR_APEX_STATUS_API_KEY"
 ```
 
-也可以用环境变量：
+Or use an environment variable:
 
 ```bash
 NEUROLINK_APEX_API_KEY="$YOUR_APEX_STATUS_API_KEY" go run .
 ```
 
-常用参数：
+## Language
+
+The TUI supports English and Simplified Chinese:
 
 ```bash
-go run . --api-key "$YOUR_APEX_STATUS_API_KEY" --poll-interval 30s
+go run . --lang en
+go run . --lang zh-Hans
+```
+
+Or:
+
+```bash
+NEUROLINK_LANG=zh-Hans go run .
+```
+
+Supported values are `en` and `zh-Hans`. The default is `en`.
+
+## Demo Mode
+
+If no API key is provided, `neurolink` starts in demo mode. You can also force demo mode explicitly:
+
+```bash
 go run . --demo
 ```
 
-## 无 API Key 时的行为
+Demo mode uses deterministic sample data for UI preview and local development. The dashboard labels the source as `DEMO` and does not present sample data as live Apex service status.
 
-如果没有 `--api-key`，并且没有设置 `NEUROLINK_APEX_API_KEY`，程序会进入 demo 模式。
+## Run, Build, Test
 
-Demo 模式使用确定性的示例数据，只用于展示界面和本地开发。界面会显示 `DEMO` 来源和 demo 提示，不会把示例数据伪装成实时 Apex 服务状态。
-
-## 运行、构建、测试
-
-运行：
+Run with demo data:
 
 ```bash
 go run .
 ```
 
-使用真实 API：
+Run with live status polling:
 
 ```bash
 NEUROLINK_APEX_API_KEY="$YOUR_APEX_STATUS_API_KEY" go run . --poll-interval 1m
 ```
 
-构建：
+Build:
 
 ```bash
 go build ./...
 ```
 
-测试：
+Test:
 
 ```bash
 go test ./...
+go test -race ./...
 ```
 
-格式化：
+Format:
 
 ```bash
 gofmt -w .
 ```
 
-## 可选 ping 诊断
+## Community Pulse
 
-旧的 ICMP ping 代码保留为显式诊断模块，但不再是主监控数据源，也不会默认使用 TEST-NET
-占位地址。需要做网络层诊断时，应显式提供目标，并把结果当作辅助信息，而不是 Apex 服务健康状态。
+The top-right report panel is labeled `Community Pulse`. It shows recent community reports only when the `/servers` payload includes a report feed. If the feed is absent, the panel explains that the current `/servers` response does not include recent reports and keeps attribution to Apex Legends Status.
 
-Linux 上运行 ICMP 诊断可能需要允许非特权 ping：
+This panel is service-health context only. It is not player profile or player-status tracking.
+
+## Optional Ping Diagnostics
+
+The older ICMP ping probe remains available only as an explicit diagnostics module. It is not the primary monitoring source and should not be presented as real Apex server monitoring unless concrete targets are configured.
+
+On Linux, non-privileged ICMP diagnostics may require:
 
 ```bash
 sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
 ```
 
-## 当前限制和 TODO
+## Current Limits and TODO
 
-- Apex Legends Status API 的字段可能变化；当前 normalizer 对常见字段和核心服务别名做了兼容处理。
-- 没有 API key 时只能看到 demo 数据。
-- 最近用户报告只有在 API payload 提供相关字段时才会展示。
-- ping 诊断还没有作为独立 TUI 面板暴露。
-- 后续可以增加配置文件、更多平台服务卡片、状态变化历史和更细粒度的桌面通知。
-
-## English
-
-`neurolink` is a Go Bubble Tea TUI for checking Apex Legends service health using the Apex Legends Status API ecosystem. It reads API keys only from `--api-key` or `NEUROLINK_APEX_API_KEY`. Without a key, or with `--demo`, it shows deterministic demo data clearly labeled as demo data.
-
-Run:
-
-```bash
-go run . --api-key "$YOUR_APEX_STATUS_API_KEY"
-```
-
-Build and test:
-
-```bash
-go build ./...
-go test ./...
-```
+- The Apex Legends Status API payload shape may change; normalization handles common fields and core service aliases.
+- Without an API key, only demo data is available.
+- Recent community reports appear only when the `/servers` payload provides a report feed.
+- Ping diagnostics are not yet exposed as a dedicated TUI panel.
+- Future work may add a config file, more service cards, status history, and more granular desktop notifications.

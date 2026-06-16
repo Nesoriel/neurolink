@@ -27,7 +27,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	snapshots := collector.Start(ctx, collectorCfg)
 
-	program := tea.NewProgram(tui.NewModel(snapshots), tea.WithAltScreen())
+	program := tea.NewProgram(tui.NewModel(snapshots, appCfg.Language), tea.WithAltScreen())
 	_, err = program.Run()
 	cancel()
 	if err != nil {

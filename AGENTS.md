@@ -82,22 +82,24 @@ Provide flags and environment variables:
 - API key: `--api-key` or `NEUROLINK_APEX_API_KEY`
 - Poll interval: `--poll-interval`
 - Demo mode: `--demo`
+- Language: `--lang` or `NEUROLINK_LANG`, supporting `en` and `zh-Hans` with default `en`
 - Optional ping diagnostics targets: explicit flags only
 
 If no API key is provided, start in demo mode or show a clear setup screen. The user must understand whether data is real or demo.
 
 # Documentation
 
-README must include Simplified Chinese first. English can be secondary.
+README.md must be English-first. Keep a full Simplified Chinese document at README.zh-Hans.md for domestic users. Cross-link both files near the top, and update both when user-facing behavior, configuration, limits, or data-source explanations change.
 
-Chinese README must explain:
+Both English and Chinese docs must explain:
 
-- 这个工具是做什么的
-- 当前数据来源是什么
-- API key 如何配置
-- 无 API key 时是什么行为
-- 如何运行、构建、测试
-- 当前限制和 TODO
+- What the tool does
+- Current data sources
+- API key configuration
+- Language configuration
+- Behavior without an API key
+- How to run, build, and test
+- Current limitations and TODOs
 
 # Engineering Rules
 

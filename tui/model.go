@@ -15,6 +15,7 @@ import (
 type Model struct {
 	snapshots <-chan collector.Snapshot
 	snapshot  collector.Snapshot
+	copy      lexicon
 	ready     bool
 	width     int
 	height    int
@@ -24,8 +25,12 @@ type Model struct {
 type snapshotMsg collector.Snapshot
 type snapshotsClosedMsg struct{}
 
-func NewModel(snapshots <-chan collector.Snapshot) Model {
-	return Model{snapshots: snapshots}
+func NewModel(snapshots <-chan collector.Snapshot, languages ...Language) Model {
+	language := LanguageEnglish
+	if len(languages) > 0 {
+		language = languages[0]
+	}
+	return Model{snapshots: snapshots, copy: lexiconFor(language)}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -56,18 +61,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	if m.stopped {
-		return "neurolink stopped\n"
+		return m.copy.stopped
 	}
 
 	width := contentWidth(m.width)
 	if !m.ready {
-		return shellStyle.Width(width).Render(loadingStyle.Render("NEUROLINK // acquiring service feed..."))
+		return shellStyle.Width(width).Render(loadingStyle.Render(m.copy.loading))
 	}
 
 	parts := []string{
-		renderHeader(m.snapshot, width),
-		renderDashboard(m.snapshot, width),
-		renderFooter(m.snapshot, width),
+		renderHeader(m.snapshot, width, m.copy),
+		renderDashboard(m.snapshot, width, m.copy),
+		renderFooter(m.snapshot, width, m.copy),
 	}
 
 	return shellStyle.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
@@ -83,20 +88,17 @@ func waitForSnapshot(ch <-chan collector.Snapshot) tea.Cmd {
 	}
 }
 
-func renderHeader(snapshot collector.Snapshot, width int) string {
-	mode := "● IDLE"
-	if snapshot.BattleMode {
-		mode = "● BATTLE"
-	}
+func renderHeader(snapshot collector.Snapshot, width int, copy lexicon) string {
+	mode := copy.modeLabel(snapshot.BattleMode)
 	if snapshot.ProcessName != "" {
 		mode += " " + snapshot.ProcessName
 	}
 
 	title := titleStyle.Render("NEUROLINK")
-	subtitle := mutedStyle.Render("Crypto surveillance drone / Apex service health")
+	subtitle := mutedStyle.Render(copy.headerSubtitle)
 	modeChip := modeStyle(snapshot.BattleMode).Render(fit(mode, 26))
 	sourceChip := sourceStyle(snapshot.Status.Source).Render(string(snapshot.Status.Source))
-	update := mutedStyle.Render("Last update " + formatClock(snapshot.UpdatedAt))
+	update := mutedStyle.Render(copy.lastUpdatePrefix + formatClock(snapshot.UpdatedAt))
 
 	meta := lipgloss.JoinHorizontal(lipgloss.Center, modeChip, " ", sourceChip, " ", update)
 	line := title
@@ -108,70 +110,75 @@ func renderHeader(snapshot collector.Snapshot, width int) string {
 	return headerBox.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, line, subtitle))
 }
 
-func renderDashboard(snapshot collector.Snapshot, width int) string {
-	summary := renderSummary(snapshot, cardContentWidth(width))
-	reports := renderReports(snapshot, cardContentWidth(width))
+func renderDashboard(snapshot collector.Snapshot, width int, copy lexicon) string {
+	summary := renderSummary(snapshot, cardContentWidth(width), copy)
+	reports := renderReports(snapshot, cardContentWidth(width), copy)
 
 	top := lipgloss.JoinVertical(lipgloss.Left, summary, reports)
 	if width >= 96 {
 		col := twoColumnContentWidth(width)
-		top = lipgloss.JoinHorizontal(lipgloss.Top, renderSummary(snapshot, col), "  ", renderReports(snapshot, col))
+		top = lipgloss.JoinHorizontal(lipgloss.Top, renderSummary(snapshot, col, copy), "  ", renderReports(snapshot, col, copy))
 	}
 
-	services := renderServiceGrid(snapshot.Status, width)
+	services := renderServiceGrid(snapshot.Status, width, copy)
 	return lipgloss.JoinVertical(lipgloss.Left, top, services)
 }
 
-func renderSummary(snapshot collector.Snapshot, width int) string {
+func renderSummary(snapshot collector.Snapshot, width int, copy lexicon) string {
 	status := snapshot.Status.Overall
 	down, degraded, unknown := serviceCounts(snapshot.Status.Services)
 
 	lines := []string{
-		sectionTitleStyle.Render("STATUS SUMMARY"),
-		statusChip(status) + "  " + statusBar(status),
-		fmt.Sprintf("Impacted services  %s", countStyle.Render(fmt.Sprintf("%d", down+degraded))),
-		fmt.Sprintf("Down / degraded    %d / %d", down, degraded),
-		fmt.Sprintf("Unknown checks     %d", unknown),
-		fmt.Sprintf("API mode           %s", string(snapshot.Status.Source)),
+		sectionTitleStyle.Render(copy.statusSummaryTitle),
+		statusChip(status, copy) + "  " + statusBar(status),
+		summaryLine(copy.impactedServices, countStyle.Render(fmt.Sprintf("%d", down+degraded))),
+		summaryLine(copy.downDegraded, fmt.Sprintf("%d / %d", down, degraded)),
+		summaryLine(copy.unknownChecks, fmt.Sprintf("%d", unknown)),
+		summaryLine(copy.apiMode, string(snapshot.Status.Source)),
 	}
 	if snapshot.Status.Source == statusapi.SourceDemo {
-		lines = append(lines, "", warningStyle.Render("Demo data is not live Apex service status."))
+		lines = append(lines, "", warningStyle.Render(copy.demoDataNotLive))
 	}
 
 	return cardStyleFor(status).Width(width).Render(strings.Join(lines, "\n"))
 }
 
-func renderReports(snapshot collector.Snapshot, width int) string {
-	lines := []string{sectionTitleStyle.Render("REPORTS / SOURCE")}
+func renderReports(snapshot collector.Snapshot, width int, copy lexicon) string {
+	lines := []string{sectionTitleStyle.Render(copy.communityPulseTitle)}
 	if snapshot.Status.Notice != "" {
-		lines = append(lines, warningStyle.Render(fit(snapshot.Status.Notice, width-6)))
+		lines = append(lines, warningStyle.Render(fit(copy.notice(snapshot.Status.Notice), width-6)))
 	}
 	if snapshot.LastError != "" {
-		lines = append(lines, errorStyle.Render("Refresh issue: "+fit(summarizeError(snapshot.LastError), width-21)))
+		lines = append(lines, errorStyle.Render(copy.refreshIssuePrefix+fit(copy.summarizeError(snapshot.LastError), width-lipgloss.Width(copy.refreshIssuePrefix)-6)))
 	}
 
 	reports := snapshot.Status.RecentReports
 	if len(reports) == 0 {
-		lines = append(lines, mutedStyle.Render("No recent user-report feed in this payload."))
+		lines = append(lines,
+			mutedStyle.Render(fit(copy.noReportsLine1, width-6)),
+			mutedStyle.Render(fit(copy.noReportsLine2, width-6)),
+		)
 	} else {
 		for i, report := range reports {
 			if i >= 3 {
 				break
 			}
-			lines = append(lines, renderReport(report, width-6))
+			lines = append(lines, renderReport(report, width-6, copy))
 		}
 	}
 
-	lines = append(lines, "", mutedStyle.Render(fit(snapshot.Status.Attribution, width-6)))
+	if attribution := copy.attributionLine(snapshot.Status.Attribution); attribution != "" {
+		lines = append(lines, "", mutedStyle.Render(fit(attribution, width-6)))
+	}
 	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
 }
 
-func renderServiceGrid(snapshot statusapi.Snapshot, width int) string {
+func renderServiceGrid(snapshot statusapi.Snapshot, width int, copy lexicon) string {
 	services := orderedServices(snapshot)
 	if width < 86 {
 		cards := make([]string, 0, len(services))
 		for _, service := range services {
-			cards = append(cards, renderServiceCard(service, cardContentWidth(width)))
+			cards = append(cards, renderServiceCard(service, cardContentWidth(width), copy))
 		}
 		return lipgloss.JoinVertical(lipgloss.Left, cards...)
 	}
@@ -179,28 +186,28 @@ func renderServiceGrid(snapshot statusapi.Snapshot, width int) string {
 	colWidth := twoColumnContentWidth(width)
 	rows := make([]string, 0, (len(services)+1)/2)
 	for i := 0; i < len(services); i += 2 {
-		left := renderServiceCard(services[i], colWidth)
+		left := renderServiceCard(services[i], colWidth, copy)
 		if i+1 >= len(services) {
 			rows = append(rows, left)
 			continue
 		}
-		right := renderServiceCard(services[i+1], colWidth)
+		right := renderServiceCard(services[i+1], colWidth, copy)
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-func renderServiceCard(service statusapi.ServiceStatus, width int) string {
+func renderServiceCard(service statusapi.ServiceStatus, width int, copy lexicon) string {
 	regions := renderRegions(service.Regions, width-6)
 	if regions == "" {
-		regions = mutedStyle.Render("No regional detail")
+		regions = mutedStyle.Render(copy.noRegionalDetail)
 	}
 
 	lines := []string{
 		serviceTitleStyle.Render(fit(service.Name, width-6)),
-		statusChip(service.Status) + "  " + statusBar(service.Status),
+		statusChip(service.Status, copy) + "  " + statusBar(service.Status),
 		fit(service.Summary, width-6),
-		mutedStyle.Render("Updated " + formatClock(service.UpdatedAt)),
+		mutedStyle.Render(copy.updatedPrefix + formatClock(service.UpdatedAt)),
 		"",
 		regions,
 	}
@@ -230,7 +237,7 @@ func renderRegions(regions []statusapi.RegionStatus, width int) string {
 	return mutedStyle.Render(fit(strings.Join(parts, "  "), width))
 }
 
-func renderReport(report statusapi.RecentReport, width int) string {
+func renderReport(report statusapi.RecentReport, width int, copy lexicon) string {
 	parts := []string{}
 	for _, value := range []string{report.Country, report.Platform, report.Issue, report.ErrorCode, report.At} {
 		if value != "" {
@@ -238,15 +245,15 @@ func renderReport(report statusapi.RecentReport, width int) string {
 		}
 	}
 	if len(parts) == 0 {
-		return mutedStyle.Render("Report received")
+		return mutedStyle.Render(copy.reportReceived)
 	}
 	return fit("• "+strings.Join(parts, " · "), width)
 }
 
-func renderFooter(snapshot collector.Snapshot, width int) string {
-	hint := "q quit  ctrl+c quit  --api-key or NEUROLINK_APEX_API_KEY for live status  --demo for sample data"
+func renderFooter(snapshot collector.Snapshot, width int, copy lexicon) string {
+	hint := copy.footerSetup
 	if snapshot.Status.Source == statusapi.SourceLive {
-		hint = "q quit  ctrl+c quit  --poll-interval controls refresh cadence"
+		hint = copy.footerLive
 	}
 	return footerStyle.Width(width).Render(fit(hint, width))
 }
@@ -275,21 +282,12 @@ func serviceCounts(services []statusapi.ServiceStatus) (down int, degraded int, 
 	return down, degraded, unknown
 }
 
-func statusChip(status statusapi.Status) string {
-	return chipStyle(status).Render(statusLabel(status))
+func summaryLine(label string, value string) string {
+	return label + "  " + value
 }
 
-func statusLabel(status statusapi.Status) string {
-	switch status {
-	case statusapi.StatusHealthy:
-		return "● RUNNING"
-	case statusapi.StatusDegraded:
-		return "▲ DEGRADED"
-	case statusapi.StatusDown:
-		return "✕ DOWN"
-	default:
-		return "? UNKNOWN"
-	}
+func statusChip(status statusapi.Status, copy lexicon) string {
+	return chipStyle(status).Render(copy.statusLabel(status))
 }
 
 func statusGlyph(status statusapi.Status) string {
@@ -372,20 +370,6 @@ func modeStyle(battle bool) lipgloss.Style {
 	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("16")).Background(lipgloss.Color("42")).Padding(0, 1)
 }
 
-func summarizeError(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	if strings.Contains(value, "HTTP 401") || strings.Contains(value, "HTTP 403") {
-		return "API key rejected by status API"
-	}
-	if strings.Contains(value, "context canceled") {
-		return "refresh canceled"
-	}
-	return fit(value, 72)
-}
-
 func formatClock(value time.Time) string {
 	if value.IsZero() {
 		return "--:--:--"
@@ -413,14 +397,22 @@ func fit(value string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	runes := []rune(value)
-	if len(runes) <= width {
+	if lipgloss.Width(value) <= width {
 		return value
 	}
 	if width == 1 {
 		return "…"
 	}
-	return string(runes[:width-1]) + "…"
+
+	var builder strings.Builder
+	for _, r := range value {
+		next := string(r)
+		if lipgloss.Width(builder.String())+lipgloss.Width(next) > width-1 {
+			break
+		}
+		builder.WriteRune(r)
+	}
+	return builder.String() + "…"
 }
 
 func min(a, b int) int {
