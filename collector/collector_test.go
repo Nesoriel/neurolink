@@ -53,6 +53,31 @@ func TestPollStatusFetchesImmediately(t *testing.T) {
 	}
 }
 
+func TestPollStatusRefreshFetchesOnDemand(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	out := make(chan PollResult, 4)
+	refresh := make(chan struct{}, 1)
+	provider := &fakeProvider{snapshots: []statusapi.Snapshot{
+		testStatusSnapshot(statusapi.StatusHealthy),
+		testStatusSnapshot(statusapi.StatusDegraded),
+	}}
+
+	go PollStatusWithRefresh(ctx, provider, time.Hour, refresh, out)
+
+	first := receivePollResult(t, out)
+	if first.Snapshot.Overall != statusapi.StatusHealthy {
+		t.Fatalf("first overall = %s, want healthy", first.Snapshot.Overall)
+	}
+	refresh <- struct{}{}
+
+	second := receivePollResult(t, out)
+	if second.Snapshot.Overall != statusapi.StatusDegraded {
+		t.Fatalf("second overall = %s, want degraded after refresh", second.Snapshot.Overall)
+	}
+}
+
 func TestCombinePublishesStatusWithBattleMode(t *testing.T) {
 	originalNotify := notifyDesktop
 	notifyDesktop = func(title string, message string, appIcon any) error { return nil }
@@ -137,6 +162,18 @@ func receiveCollectorSnapshot(t *testing.T, ch <-chan Snapshot) Snapshot {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for collector snapshot")
 		return Snapshot{}
+	}
+}
+
+func receivePollResult(t *testing.T, ch <-chan PollResult) PollResult {
+	t.Helper()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for poll result")
+		return PollResult{}
 	}
 }
 

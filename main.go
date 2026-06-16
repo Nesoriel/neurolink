@@ -33,9 +33,10 @@ func main() {
 	collectorCfg.PollInterval = appCfg.PollInterval
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	snapshots := collector.Start(ctx, collectorCfg)
+	refresh := make(chan struct{}, 1)
+	snapshots := collector.StartWithRefresh(ctx, collectorCfg, refresh)
 
-	program := tea.NewProgram(tui.NewModel(snapshots, appCfg.Language), tea.WithAltScreen())
+	program := tea.NewProgram(tui.NewModelWithPlayerProvider(snapshots, appCfg.playerProvider(), refresh, appCfg.Language), tea.WithAltScreen())
 	_, err = program.Run()
 	cancel()
 	if err != nil {

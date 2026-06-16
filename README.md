@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-Hans.md)
 
-`neurolink` is a Go Terminal UI for monitoring Apex Legends service health before or during play. It presents a Crypto-style surveillance dashboard focused on Apex service availability, not fake ICMP pings or player-status tracking.
+`neurolink` is a Go Terminal UI for monitoring Apex Legends service health before or during play, with explicit on-demand Apex player stat lookup. It presents a Crypto-style surveillance dashboard focused on Apex service availability and quick pre-game inspection, not fake ICMP pings or background player tracking.
 
 The app monitors service availability such as:
 
@@ -13,7 +13,7 @@ The app monitors service availability such as:
 - Apex Legends Status API health
 - Recent community reports when the status payload includes them
 
-`neurolink` does not query player profiles, player stats, UID lookup, match history, or player online status.
+The player view can query a player by name and platform (`PC`, `PS4`, or `X1`) using Apex Legends Status `/bridge`. Lookup only runs after a visible user action such as pressing Enter in the player view. PC lookup generally uses the Origin account name, even for Steam-linked accounts. `neurolink` does not continuously track players, query match history in the background, or hide telemetry.
 
 ## Data Source
 
@@ -23,15 +23,25 @@ The primary data source is the Apex Legends Status public site/API ecosystem:
 - API docs/base: `https://apexlegendsapi.com/`
 - API base: `https://api.apexlegendsstatus.com/`
 
-The current implementation polls:
+The dashboard polls:
 
 ```text
 GET https://api.apexlegendsstatus.com/servers
 ```
 
+The player view queries only on demand:
+
+```text
+GET https://api.apexlegendsstatus.com/bridge?player=PLAYER_NAME&platform=PLATFORM
+```
+
+Both endpoints require an Apex Legends Status API key for live data. The app sends the key with the `Authorization` header and never hard-codes or logs sample tokens.
+
 The `/servers` endpoint may return JSON with `Content-Type: text/plain;charset=UTF-8`, so the client sends `Accept: */*` and decodes the response body as JSON.
 
 The normalized dashboard includes the core service cards above. Overall status is derived from playable game services; the Apex Legends Status API health card is shown separately so a status-site issue does not automatically mark Apex gameplay services as down.
+
+The player lookup normalizes the `/bridge` response into identity, platform, UID, level, rank, selected legend, and tracker values. It intentionally avoids presenting continuous online/lobby tracking.
 
 ## Install
 
@@ -67,6 +77,19 @@ The same flags work with `go run .` during development:
 go run . --demo
 go run . --lang zh-Hans
 ```
+
+## TUI Controls
+
+- `tab` / `shift+tab`: switch views
+- `1`: dashboard
+- `2`: player lookup
+- `3`: config
+- `?`: help
+- `/`: open player lookup and focus the player input
+- `enter`: run player lookup from the player view
+- `p`: cycle `PC` / `PS4` / `X1` when the player input is not focused
+- `r`: request an immediate service status refresh
+- `q` / `ctrl+c`: quit
 
 ## Persistent Config
 
@@ -148,7 +171,7 @@ If no API key is available from the config file, environment, or `--api-key`, `n
 neurolink --demo
 ```
 
-Demo mode uses deterministic sample data for UI preview and local development. The dashboard labels the source as `DEMO` and does not present sample data as live Apex service status.
+Demo mode uses deterministic sample data for UI preview and local development. The dashboard and player result cards label the source as `DEMO` and do not present sample data as live Apex service or player data.
 
 ## Build and Test
 
@@ -175,7 +198,7 @@ gofmt -w .
 
 The top-right report panel is labeled `Community Pulse`. It shows recent community reports only when the `/servers` payload includes a report feed. If the feed is absent, the panel explains that the current `/servers` response does not include recent reports and keeps attribution to Apex Legends Status.
 
-This panel is service-health context only. It is not player profile or player-status tracking.
+This panel is service-health context only. Player stats are available only through the explicit player lookup view.
 
 ## Optional Ping Diagnostics
 
@@ -192,5 +215,7 @@ sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
 - The Apex Legends Status API payload shape may change; normalization handles common fields and core service aliases.
 - Without an API key, only demo data is available.
 - Recent community reports appear only when the `/servers` payload provides a report feed.
+- Player lookup currently supports name + platform searches for `PC`, `PS4`, and `X1`; UID lookup is documented upstream but not exposed in this first TUI iteration.
+- The player view summarizes stats from `/bridge` and avoids continuous online/lobby tracking.
 - Ping diagnostics are not yet exposed as a dedicated TUI panel.
-- Future work may add more service cards, status history, and more granular desktop notifications.
+- Future work may add more service cards, richer status history, saved lookup defaults, and more granular desktop notifications.

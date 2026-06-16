@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Nesoriel/neurolink/playerapi"
 	"github.com/Nesoriel/neurolink/statusapi"
 	"github.com/Nesoriel/neurolink/tui"
 )
@@ -286,6 +287,17 @@ func TestAppConfigProviderSelectsDemoWithoutKey(t *testing.T) {
 		t.Fatalf("Fetch() error = %v", err)
 	}
 	if snapshot.Source != statusapi.SourceDemo {
+		t.Fatalf("source = %s, want demo", snapshot.Source)
+	}
+}
+
+func TestAppConfigPlayerProviderSelectsDemoWithoutKey(t *testing.T) {
+	cfg := appConfig{}
+	snapshot, err := cfg.playerProvider().Lookup(context.Background(), playerapi.LookupRequest{Player: "Demo", Platform: playerapi.PlatformPC})
+	if err != nil {
+		t.Fatalf("Lookup() error = %v", err)
+	}
+	if snapshot.Source != playerapi.SourceDemo {
 		t.Fatalf("source = %s, want demo", snapshot.Source)
 	}
 }

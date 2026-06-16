@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Nesoriel/neurolink/playerapi"
 	"github.com/Nesoriel/neurolink/statusapi"
 	"github.com/Nesoriel/neurolink/tui"
 )
@@ -104,6 +105,13 @@ func (c appConfig) provider() statusapi.Provider {
 		return statusapi.NewDemoProvider()
 	}
 	return statusapi.NewClient(statusapi.ClientOptions{APIKey: c.APIKey})
+}
+
+func (c appConfig) playerProvider() playerapi.Provider {
+	if c.Demo || c.APIKey == "" {
+		return playerapi.NewDemoProvider()
+	}
+	return playerapi.NewClient(playerapi.ClientOptions{APIKey: c.APIKey})
 }
 
 func defaultConfigPath() (string, error) {

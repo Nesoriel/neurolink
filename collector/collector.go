@@ -12,6 +12,10 @@ import (
 // Apex Legends Status API provider; process watching only changes the displayed
 // play mode and alert policy.
 func Start(ctx context.Context, cfg Config) <-chan Snapshot {
+	return StartWithRefresh(ctx, cfg, nil)
+}
+
+func StartWithRefresh(ctx context.Context, cfg Config, refresh <-chan struct{}) <-chan Snapshot {
 	cfg = cfg.withDefaults()
 
 	rawModeCh := make(chan ModeState, 1)
@@ -19,13 +23,17 @@ func Start(ctx context.Context, cfg Config) <-chan Snapshot {
 	snapshotCh := make(chan Snapshot, 4)
 
 	go WatchProcess(ctx, cfg.ProcessCheckInterval, rawModeCh)
-	go PollStatus(ctx, cfg.Provider, cfg.PollInterval, statusCh)
+	go PollStatusWithRefresh(ctx, cfg.Provider, cfg.PollInterval, refresh, statusCh)
 	go Combine(ctx, rawModeCh, statusCh, snapshotCh)
 
 	return snapshotCh
 }
 
 func PollStatus(ctx context.Context, provider statusapi.Provider, interval time.Duration, out chan<- PollResult) {
+	PollStatusWithRefresh(ctx, provider, interval, nil, out)
+}
+
+func PollStatusWithRefresh(ctx context.Context, provider statusapi.Provider, interval time.Duration, refresh <-chan struct{}, out chan<- PollResult) {
 	if interval <= 0 {
 		interval = time.Minute
 	}
@@ -53,6 +61,14 @@ func PollStatus(ctx context.Context, provider statusapi.Provider, interval time.
 		select {
 		case <-ctx.Done():
 			return
+		case _, ok := <-refresh:
+			if !ok {
+				refresh = nil
+				continue
+			}
+			if !fetchAndSend() {
+				return
+			}
 		case <-ticker.C:
 			if !fetchAndSend() {
 				return
