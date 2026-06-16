@@ -7,7 +7,11 @@ import (
 	probing "github.com/prometheus-community/pro-bing"
 )
 
-func NetworkProbe(ctx context.Context, target Target, cfg Config, modeCh <-chan ModeState, out chan<- PingSample) {
+func NetworkProbe(ctx context.Context, target Target, cfg PingConfig, modeCh <-chan ModeState, out chan<- PingSample) {
+	if cfg.PingTimeout <= 0 || cfg.BattlePingInterval <= 0 || cfg.IdlePingInterval <= 0 {
+		cfg = defaultPingConfig()
+	}
+
 	mode := ModeIdle
 	probed := false
 	timer := time.NewTimer(0)
@@ -72,7 +76,7 @@ func pingOnce(target Target, mode Mode, timeout time.Duration) PingSample {
 	return sample
 }
 
-func intervalForMode(mode Mode, cfg Config) time.Duration {
+func intervalForMode(mode Mode, cfg PingConfig) time.Duration {
 	if mode == ModeBattle {
 		return cfg.BattlePingInterval
 	}

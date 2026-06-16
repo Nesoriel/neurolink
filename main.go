@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -15,33 +14,24 @@ import (
 )
 
 func main() {
-	cfg := collector.DefaultConfig()
-
-	hongKongTarget := flag.String("hk", envOrDefault("NEUROLINK_HK_TARGET", collector.HongKongTargetIP), "Hong Kong Apex server target IP or hostname")
-	singaporeTarget := flag.String("sg", envOrDefault("NEUROLINK_SG_TARGET", collector.SingaporeTargetIP), "Singapore Apex server target IP or hostname")
-	flag.Parse()
-
-	cfg.Targets = []collector.Target{
-		{Cluster: collector.ClusterHongKong, Name: "Hong Kong Server Cluster", Address: *hongKongTarget},
-		{Cluster: collector.ClusterSingapore, Name: "Singapore Server Cluster", Address: *singaporeTarget},
+	appCfg, err := parseAppConfig(os.Args[1:], os.Getenv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "neurolink: %v\n", err)
+		os.Exit(2)
 	}
+
+	collectorCfg := collector.DefaultConfig()
+	collectorCfg.Provider = appCfg.provider()
+	collectorCfg.PollInterval = appCfg.PollInterval
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	metricsCh := collector.Start(ctx, cfg)
+	snapshots := collector.Start(ctx, collectorCfg)
 
-	program := tea.NewProgram(tui.NewModel(metricsCh), tea.WithAltScreen())
-	_, err := program.Run()
+	program := tea.NewProgram(tui.NewModel(snapshots), tea.WithAltScreen())
+	_, err = program.Run()
 	cancel()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "apex-server-monitor: %v\n", err)
+		fmt.Fprintf(os.Stderr, "neurolink: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func envOrDefault(key string, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-	return value
 }

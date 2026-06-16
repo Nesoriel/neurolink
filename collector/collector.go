@@ -1,74 +1,160 @@
 package collector
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"time"
 
-// Start wires the application's background pipeline:
-//   - WatchProcess emits ModeState values when Apex starts or exits.
-//   - broadcastMode fans those mode changes out to every network probe and the
-//     aggregator. A single Go channel is not a broadcast primitive, so this
-//     small fan-out goroutine keeps each consumer independent.
-//   - Each NetworkProbe goroutine pings one target and sends PingSample values.
-//   - Aggregate consumes samples plus mode changes, maintains sliding windows,
-//     and emits MetricsSnapshot values for the Bubble Tea model.
-//
-// The TUI receives only the final metrics channel. Its tea.Cmd blocks on this
-// channel, returns a message to Update, then schedules another wait command.
-func Start(ctx context.Context, cfg Config) <-chan MetricsSnapshot {
+	"neurolink/apex-server-monitor/statusapi"
+)
+
+// Start wires the application's background pipeline. The primary feed is the
+// Apex Legends Status API provider; process watching only changes the displayed
+// play mode and alert policy.
+func Start(ctx context.Context, cfg Config) <-chan Snapshot {
 	cfg = cfg.withDefaults()
 
 	rawModeCh := make(chan ModeState, 1)
-	sampleCh := make(chan PingSample, len(cfg.Targets)*2)
-	metricsCh := make(chan MetricsSnapshot, 4)
-	aggregatorModeCh := make(chan ModeState, 1)
-
-	subscribers := []chan ModeState{aggregatorModeCh}
-	for _, target := range cfg.Targets {
-		modeCh := make(chan ModeState, 1)
-		subscribers = append(subscribers, modeCh)
-		go NetworkProbe(ctx, target, cfg, modeCh, sampleCh)
-	}
+	statusCh := make(chan PollResult, 2)
+	snapshotCh := make(chan Snapshot, 4)
 
 	go WatchProcess(ctx, cfg.ProcessCheckInterval, rawModeCh)
-	go broadcastMode(ctx, rawModeCh, subscribers...)
-	go Aggregate(ctx, cfg, aggregatorModeCh, sampleCh, metricsCh)
+	go PollStatus(ctx, cfg.Provider, cfg.PollInterval, statusCh)
+	go Combine(ctx, rawModeCh, statusCh, snapshotCh)
 
-	return metricsCh
+	return snapshotCh
 }
 
-func broadcastMode(ctx context.Context, in <-chan ModeState, subscribers ...chan ModeState) {
+func PollStatus(ctx context.Context, provider statusapi.Provider, interval time.Duration, out chan<- PollResult) {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	defer close(out)
+
+	fetchAndSend := func() bool {
+		snapshot, err := provider.Fetch(ctx)
+		result := PollResult{Snapshot: snapshot, Err: err, At: time.Now()}
+		select {
+		case <-ctx.Done():
+			return false
+		case out <- result:
+			return true
+		}
+	}
+
+	if !fetchAndSend() {
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case state, ok := <-in:
-			if !ok {
+		case <-ticker.C:
+			if !fetchAndSend() {
 				return
-			}
-			for _, subscriber := range subscribers {
-				sendLatestMode(ctx, subscriber, state)
 			}
 		}
 	}
 }
 
-func sendLatestMode(ctx context.Context, ch chan ModeState, state ModeState) {
-	select {
-	case ch <- state:
-		return
-	default:
-	}
+func Combine(ctx context.Context, modeCh <-chan ModeState, statusCh <-chan PollResult, out chan<- Snapshot) {
+	modeState := ModeState{Mode: ModeIdle, CheckedAt: time.Now()}
+	var latest statusapi.Snapshot
+	var hasStatus bool
+	var lastOverall statusapi.Status
+	defer close(out)
 
-	select {
-	case <-ch:
-	default:
+	for modeCh != nil || statusCh != nil {
+		select {
+		case <-ctx.Done():
+			return
+		case state, ok := <-modeCh:
+			if !ok {
+				modeCh = nil
+				continue
+			}
+			modeState = state
+			if hasStatus {
+				publish(ctx, out, buildSnapshot(modeState, latest, ""))
+			}
+		case result, ok := <-statusCh:
+			if !ok {
+				statusCh = nil
+				continue
+			}
+			snapshot := result.Snapshot
+			if snapshot.GeneratedAt.IsZero() {
+				snapshot = statusapi.UnavailableSnapshot(statusapi.SourceLive, result.Err, result.At)
+			}
+			if result.Err != nil && snapshot.LastError == "" {
+				snapshot.LastError = result.Err.Error()
+			}
+			hasStatus = true
+			latest = snapshot
+			if shouldNotify(modeState.BattleMode, lastOverall, snapshot.Overall) {
+				notifyServiceIncident(snapshot)
+			}
+			lastOverall = snapshot.Overall
+			publish(ctx, out, buildSnapshot(modeState, snapshot, snapshot.LastError))
+		}
 	}
+}
 
+func buildSnapshot(modeState ModeState, status statusapi.Snapshot, lastError string) Snapshot {
+	updatedAt := status.GeneratedAt
+	if updatedAt.IsZero() {
+		updatedAt = time.Now()
+	}
+	return Snapshot{
+		Mode:        modeState.Mode,
+		BattleMode:  modeState.BattleMode,
+		ProcessName: modeState.ProcessName,
+		ModeChecked: modeState.CheckedAt,
+		Status:      status,
+		UpdatedAt:   updatedAt,
+		LastError:   lastError,
+	}
+}
+
+func shouldNotify(battleMode bool, previous statusapi.Status, current statusapi.Status) bool {
+	if !battleMode || !current.IsIncident() {
+		return false
+	}
+	return previous == "" || !previous.IsIncident()
+}
+
+func notifyServiceIncident(snapshot statusapi.Snapshot) {
+	title := "Apex service status"
+	message := fmt.Sprintf("%s: %s", snapshot.Overall, incidentSummary(snapshot))
+	_ = notifyDesktop(title, message, "")
+}
+
+func incidentSummary(snapshot statusapi.Snapshot) string {
+	var impacted int
+	for _, service := range snapshot.Services {
+		if service.Status.IsIncident() {
+			impacted++
+		}
+	}
+	if impacted == 0 {
+		return "service incident detected"
+	}
+	return fmt.Sprintf("%d impacted services", impacted)
+}
+
+func publish(ctx context.Context, out chan<- Snapshot, snapshot Snapshot) {
 	select {
 	case <-ctx.Done():
 		return
-	case ch <- state:
+	case out <- snapshot:
 		return
 	default:
+		// Drop stale frames if the Bubble Tea loop is behind; the next poll or
+		// mode change will carry the latest state.
 		return
 	}
 }
