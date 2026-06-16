@@ -58,7 +58,9 @@ func (c *Client) Fetch(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	request.Header.Set("Authorization", c.apiKey)
-	request.Header.Set("Accept", "application/json")
+	// The /servers endpoint currently returns JSON with text/plain;charset=UTF-8.
+	// Asking strictly for application/json can trigger HTTP 406 on the upstream.
+	request.Header.Set("Accept", "*/*")
 	request.Header.Set("User-Agent", "neurolink/0.1")
 
 	response, err := c.httpClient.Do(request)

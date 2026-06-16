@@ -58,7 +58,7 @@ func NormalizeServerStatus(raw map[string]any, source SourceMode, now time.Time)
 		Services:      services,
 		RecentReports: normalizeReports(data),
 	}
-	snapshot.Overall = overallStatus(services)
+	snapshot.Overall = playableOverallStatus(services)
 	return snapshot
 }
 
@@ -237,6 +237,17 @@ func aggregateRegions(regions []RegionStatus) Status {
 		}
 	}
 	return overall
+}
+
+func playableOverallStatus(services []ServiceStatus) Status {
+	core := make([]ServiceStatus, 0, len(services))
+	for _, service := range services {
+		switch service.ID {
+		case ServiceCrossplayAuth, ServiceMatchmaking, ServicePCLogin, ServicePlayerAccount:
+			core = append(core, service)
+		}
+	}
+	return overallStatus(core)
 }
 
 func overallStatus(services []ServiceStatus) Status {

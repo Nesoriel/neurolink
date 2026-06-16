@@ -14,8 +14,11 @@ Use the public site/API ecosystem around Apex Legends Status:
 
 - Website reference: `https://apexlegendsstatus.com/`
 - API docs/base: `https://apexlegendsapi.com/` and `https://api.apexlegendsstatus.com/`
+- Server status endpoint: `GET https://api.apexlegendsstatus.com/servers`
 
-Important: the API normally requires an API key. Never hard-code keys. Read keys from flags or environment variables only.
+Important: the API normally requires an API key. Never hard-code keys. Read keys from flags or environment variables only. The `/servers` endpoint may return JSON as `text/plain;charset=UTF-8`; clients should avoid strict `Accept: application/json` and decode the body as JSON.
+
+This project is about Apex service/server availability only. Do not implement player profile, player stats, UID lookup, match history, or other user-status features unless the user explicitly changes scope.
 
 The app should monitor service availability such as:
 

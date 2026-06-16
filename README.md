@@ -12,13 +12,25 @@
 - API 文档与入口：`https://apexlegendsapi.com/`
 - API 基础地址：`https://api.apexlegendsstatus.com/`
 
-当前实现会轮询 `GET /servers`，并把响应归一化为这些核心服务卡片：
+当前实现会轮询 `GET /servers`，也就是官方文档中的服务器状态接口：
+
+```text
+https://api.apexlegendsstatus.com/servers
+```
+
+注意：该端点实际返回的是 `Content-Type: text/plain;charset=UTF-8`，但 body 内容是 JSON。因此客户端会使用 `Accept: */*` 并按 JSON 解码，避免上游返回 `406 Not Acceptable`。
+
+程序只关注服务器/服务可用性，不查询玩家资料、战绩、UID 或用户状态。
+
+响应会被归一化为这些服务卡片：
 
 - Crossplay Auth
 - Lobby / Matchmaking
 - PC / Desktop Logins
 - Player Accounts
 - Apex Legends Status API
+
+顶部总览的 `Overall` 只代表前四项“游戏核心可玩服务”的状态。`Apex Legends Status API` 是第三方状态站/API 自身健康度，会单独显示，但不会把大厅、匹配、登录等核心服务误判为不可用。
 
 如果 API 响应中包含最近用户报告，界面会展示简短摘要；如果没有该字段，界面会明确说明当前 payload
 没有报告 feed。

@@ -88,6 +88,29 @@ func TestNormalizeServerStatusMapsCoreServices(t *testing.T) {
 	}
 }
 
+func TestNormalizeServerStatusKeepsAPIHealthSeparateFromPlayableOverall(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	raw := map[string]any{
+		"ApexOauth_Crossplay": map[string]any{"Asia": map[string]any{"Status": "UP", "HTTPCode": float64(200)}},
+		"EA_novafusion":       map[string]any{"Asia": map[string]any{"Status": "UP", "HTTPCode": float64(200)}},
+		"Origin_login":        map[string]any{"Asia": map[string]any{"Status": "UP", "HTTPCode": float64(200)}},
+		"EA_accounts":         map[string]any{"Asia": map[string]any{"Status": "UP", "HTTPCode": float64(200)}},
+		"selfCoreTest": map[string]any{
+			"Status-website": map[string]any{"Status": "UP", "HTTPCode": float64(200)},
+			"Overflow-#1":    map[string]any{"Status": "DOWN", "HTTPCode": float64(503)},
+		},
+	}
+
+	snapshot := NormalizeServerStatus(raw, SourceLive, now)
+	if snapshot.Overall != StatusHealthy {
+		t.Fatalf("overall = %s, want healthy playable services despite API health issue", snapshot.Overall)
+	}
+	apiHealth, ok := ServiceByID(snapshot, ServiceAPIHealth)
+	if !ok || apiHealth.Status != StatusDown {
+		t.Fatalf("api health = %#v, want separate down API health card", apiHealth)
+	}
+}
+
 func TestClientUsesAuthorizationHeaderAndNormalizesResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/servers" {
@@ -96,7 +119,10 @@ func TestClientUsesAuthorizationHeaderAndNormalizesResponse(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "test-key" {
 			t.Fatalf("Authorization header = %q, want test-key", got)
 		}
-		w.Header().Set("Content-Type", "application/json")
+		if got := r.Header.Get("Accept"); got != "*/*" {
+			t.Fatalf("Accept header = %q, want */* because upstream returns text/plain JSON", got)
+		}
+		w.Header().Set("Content-Type", "text/plain;charset=UTF-8")
 		err := json.NewEncoder(w).Encode(map[string]any{
 			"ApexOauth_Crossplay": map[string]any{"EU-West": map[string]any{"Status": "UP", "HTTPCode": 200}},
 			"EA_novafusin":        map[string]any{"US-East": map[string]any{"Status": "UP", "HTTPCode": 200}},
